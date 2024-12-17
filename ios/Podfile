@@ -17,6 +17,11 @@ end
 target 'shareride' do
   config = use_native_modules!
 
+  #google maps
+  # pod 'react-native-google-maps', :path => '../node_modules/react-native-maps' # (Google Maps API를 사용하는 경우)
+
+  # use_frameworks! :linkage => :static
+
   use_react_native!(
     :path => config[:reactNativePath],
     # An absolute path to your application root.
