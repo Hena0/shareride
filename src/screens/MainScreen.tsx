@@ -1,141 +1,4 @@
-// import React, { useState, useEffect } from 'react';
-// import {
-//   View,
-//   StyleSheet,
-//   Dimensions,
-//   Alert,
-//   Image,
-//   TouchableOpacity
-// } from 'react-native';
-// import MapView, { Marker, Circle } from 'react-native-maps';
-// import * as Location from 'expo-location';
-
-// const { width, height } = Dimensions.get('window');
-
-// const ASPECT_RATIO = width / height;
-// const LATITUDE_DELTA = 0.02; // 지도의 초기 확대/축소 수준
-// const LONGITUDE_DELTA = LATITUDE_DELTA * ASPECT_RATIO;
-
-// interface MarkerData {
-//     id: number;
-//     coordinate: {
-//       latitude: number;
-//       longitude: number;
-//     };
-//     imageUrl: string;
-// }
-  
-// const markers: MarkerData[] = [
-//     {
-//       id: 1,
-//       coordinate: { latitude: 37.5665, longitude: 126.9780 }, 
-//       imageUrl: require('../assets/alphaca.png'), 
-//     },
-//     {
-//       id: 2,
-//       coordinate: { latitude: 37.5519, longitude: 127.0738 }, 
-//       imageUrl: require('../assets/beam.png'), 
-//     },
-//     {
-//       id: 3,
-//       coordinate: { latitude: 37.5882, longitude: 127.0060 }, 
-//       imageUrl: require('../assets/swing.png'), 
-//     },
-// ];
-
-// const MainScreen: React.FC = () => {
-//   const [location, setLocation] = useState(null);
-//   const [errorMsg, setErrorMsg] = useState(null);
-//   const [mapRegion, setMapRegion] = useState({ // 지도의 초기 위치 (서울 시청)
-//     latitude: 37.5665,
-//     longitude: 126.9780,
-//     latitudeDelta: LATITUDE_DELTA,
-//     longitudeDelta: LONGITUDE_DELTA,
-//   });
-
-//   useEffect(() => {
-//     (async () => {
-//       let { status } = await Location.requestForegroundPermissionsAsync();
-//       if (status !== 'granted') {
-//         setErrorMsg('Permission to access location was denied');
-//         Alert.alert('Error', errorMsg);
-//         return;
-//       }
-
-//       let userLocation = await Location.getCurrentPositionAsync({});
-//       setLocation(userLocation);
-//       setMapRegion({
-//         latitude: userLocation.coords.latitude,
-//         longitude: userLocation.coords.longitude,
-//         latitudeDelta: LATITUDE_DELTA,
-//         longitudeDelta: LONGITUDE_DELTA,
-//       });
-//     })();
-//   }, []);
-
-//   const handleMarkerPress = (markerId: number) => {
-//     Alert.alert('Marker Pressed', `Marker ID: ${markerId}`);
-//   };
-
-//   return (
-//     <View style={styles.container}>
-//       <MapView style={styles.map} region={mapRegion}>
-//         {location && (
-//           <Marker
-//             coordinate={{
-//               latitude: location.coords.latitude,
-//               longitude: location.coords.longitude,
-//             }}
-//             title="Your Location"
-//           >
-//             <View style={styles.userLocationMarker} />
-//           </Marker>
-//         )}
-
-//         {markers.map((marker) => (
-//           <Marker
-//             key={marker.id}
-//             coordinate={marker.coordinate}
-//             onPress={() => handleMarkerPress(marker.id)}
-//           >
-//             <Image source={marker.imageUrl} style={styles.markerImage} />
-//           </Marker>
-//         ))}
-//       </MapView>
-//     </View>
-//   );
-// };
-
-// const styles = StyleSheet.create({
-//   container: {
-//     flex: 1,
-//     backgroundColor: '#fff',
-//     alignItems: 'center',
-//     justifyContent: 'center',
-//   },
-//   map: {
-//     width: width,
-//     height: height,
-//   },
-//   userLocationMarker: {
-//     width: 15,
-//     height: 15,
-//     borderRadius: 7.5,
-//     backgroundColor: 'blue',
-//     borderWidth: 2,
-//     borderColor: 'white'
-//   },
-//   markerImage: {
-//     width: 40,
-//     height: 40,
-//     borderRadius: 20,
-//   },
-// });
-
-// export default MainScreen;
-
-
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -144,41 +7,105 @@ import {
   Text,
   Dimensions,
   Alert,
+  PermissionsAndroid,
+  Platform,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { launchCamera } from 'react-native-image-picker';
+import { launchCamera, Asset } from 'react-native-image-picker';
+import analyzeImage from '../services/geminiService'; // 사진 분석 서비스 호출
 
 const MainScreen = () => {
-  const navigation = useNavigation();
+  const [photo, setPhoto] = useState<string | null>(null); // 촬영된 사진 URI 저장
+  const [result, setResult] = useState<string | null>(null); // 분석 결과 저장
 
-  // 카메라 실행 함수
-  const openCamera = () => {
-    const options = {
-      mediaType: 'photo',
-      saveToPhotos: true,
-    };
+  // Android 카메라 권한 요청
+  const requestCameraPermission = async () => {
+    if (Platform.OS === 'android') {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        {
+          title: '카메라 접근 권한 요청',
+          message: '이 앱이 카메라에 접근하려면 권한이 필요합니다.',
+          buttonNeutral: '나중에',
+          buttonNegative: '취소',
+          buttonPositive: '허용',
+        }
+      );
 
-    launchCamera(options, (response) => {
-      if (response.didCancel) {
-        Alert.alert('카메라가 취소되었습니다.');
-      } else if (response.errorCode) {
-        Alert.alert('에러', response.errorMessage || '카메라 실행 중 오류가 발생했습니다.');
-      } else {
-        console.log('Camera Response:', response);
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+        Alert.alert('권한 거부됨', '카메라 권한이 필요합니다.');
+        return false;
       }
-    });
+    }
+    return true;
   };
+
+  // 카메라 버튼 클릭 시 호출
+  const handleTakePhoto = async () => {
+    const permissionGranted = await requestCameraPermission();
+    if (!permissionGranted) return;
+
+    try {
+      const response = await launchCamera({
+        mediaType: 'photo',
+        cameraType: 'back',
+        saveToPhotos: true, // 사진을 갤러리에 저장
+      });
+
+      if (response.didCancel) {
+        Alert.alert('취소됨', '사진 촬영이 취소되었습니다.');
+        return;
+      }
+
+      if (response.errorCode || response.errorMessage) {
+        Alert.alert(
+          '오류',
+          `사진 촬영 중 오류가 발생했습니다: ${response.errorMessage || response.errorCode}`
+        );
+        return;
+      }
+
+      const asset: Asset | undefined = response.assets?.[0];
+      if (asset?.uri) {
+        const photoUri = asset.uri;
+        setPhoto(photoUri);
+
+        // 사진 분석 호출
+        const analysis = await analyzeImage(photoUri);
+        setResult(analysis);
+
+        // 결과 알림
+        Alert.alert('분석 결과', analysis);
+      } else {
+        Alert.alert('오류', '사진을 가져오는 데 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('사진 촬영 또는 분석 중 오류:', error);
+      Alert.alert('오류', '사진 촬영 중 문제가 발생했습니다.');
+    }
+  };
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      requestCameraPermission();
+    }
+  }, []);
 
   return (
     <View style={styles.container}>
       <ImageBackground
-        source={require('../assets/map.png')}
+        source={require('../assets/map.png')} // 지도 이미지
         style={styles.backgroundImage}
         resizeMode="cover"
       >
-        <TouchableOpacity style={styles.cameraButton} onPress={openCamera}>
+        <TouchableOpacity style={styles.cameraButton} onPress={handleTakePhoto}>
           <Text style={styles.buttonText}>📷</Text>
         </TouchableOpacity>
+
+        {result && (
+          <View style={styles.resultContainer}>
+            <Text style={styles.resultText}>분석 결과: {result}</Text>
+          </View>
+        )}
       </ImageBackground>
     </View>
   );
@@ -207,6 +134,20 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  resultContainer: {
+    position: 'absolute',
+    bottom: 50,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 10,
+    padding: 15,
+  },
+  resultText: {
+    color: 'white',
+    fontSize: 16,
+    textAlign: 'center',
   },
 });
 
